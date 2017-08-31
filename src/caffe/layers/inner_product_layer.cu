@@ -12,6 +12,24 @@ void InnerProductLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
   const Dtype* bottom_data = bottom[0]->gpu_data();
   Dtype* top_data = top[0]->mutable_gpu_data();
   const Dtype* weight = this->blobs_[0]->gpu_data();
+
+  // output the weights into the dest file  
+  const Dtype* weights = this->blobs_[0]->cpu_data();
+  int num = this->blobs_[0]->num();
+  int dim = this->blobs_[0]->count() / num;
+  if(output_weights_){
+    std::ofstream outfile(output_path_, ios::app);
+    for (int i = 0; i < num; ++i) {
+    // Top-k accuracy
+      for (int j = 0; j < dim; ++j) {
+        outfile << weights[i*dim+j] << " ";
+      }
+      outfile << this->blobs_[1]->cpu_data()[i] << std::endl;
+    }
+    outfile.close();
+  }
+  // -------------------------------------
+
   if (M_ == 1) {
     caffe_gpu_gemv<Dtype>(CblasNoTrans, N_, K_, (Dtype)1.,
                          weight, bottom_data, (Dtype)0., top_data);

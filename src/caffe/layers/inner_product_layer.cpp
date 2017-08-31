@@ -12,6 +12,10 @@ void InnerProductLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   const int num_output = this->layer_param_.inner_product_param().num_output();
   bias_term_ = this->layer_param_.inner_product_param().bias_term();
   transpose_ = this->layer_param_.inner_product_param().transpose();
+  output_weights_ = this->layer_param_.score_param().has_dest_file();
+  if (output_weights_) {
+  	output_path_ = this->layer_param_.score_param().dest_file().c_str();
+  } 
   N_ = num_output;
   const int axis = bottom[0]->CanonicalAxisIndex(
       this->layer_param_.inner_product_param().axis());
@@ -86,6 +90,21 @@ void InnerProductLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();
   const Dtype* weight = this->blobs_[0]->cpu_data();
+  // output the weights into the dest file  
+  int num = this->blobs_[0]->num();
+  int dim = this->blobs_[0]->count() / num;
+  if(output_weights_){
+    std::ofstream outfile(output_path_, ios::app);
+    for (int i = 0; i < num; ++i) {
+    // Top-k accuracy
+      for (int j = 0; j < dim; ++j) {
+        outfile << weight[i*dim+j] << " ";
+      }
+      outfile << weight[i] << std::endl;
+    }
+    outfile.close();
+  }
+  // -------------------------------------
   caffe_cpu_gemm<Dtype>(CblasNoTrans, transpose_ ? CblasNoTrans : CblasTrans,
       M_, N_, K_, (Dtype)1.,
       bottom_data, weight, (Dtype)0., top_data);

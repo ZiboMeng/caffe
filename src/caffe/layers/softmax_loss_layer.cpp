@@ -92,6 +92,7 @@ void SoftmaxWithLossLayer<Dtype>::Forward_cpu(
   softmax_layer_->Forward(softmax_bottom_vec_, softmax_top_vec_);
   const Dtype* prob_data = prob_.cpu_data();
   const Dtype* label = bottom[1]->cpu_data();
+  //const Dtype* btm_data = bottom[0]->cpu_data();
   int dim = prob_.count() / outer_num_;
   int count = 0;
   Dtype loss = 0;
@@ -105,6 +106,10 @@ void SoftmaxWithLossLayer<Dtype>::Forward_cpu(
       DCHECK_LT(label_value, prob_.shape(softmax_axis_));
       loss -= log(std::max(prob_data[i * dim + label_value * inner_num_ + j],
                            Dtype(FLT_MIN)));
+      //LOG(INFO) << "label: " << label_value;
+      //LOG(INFO) << "data: " << btm_data[0] << " " << btm_data[1];
+      //LOG(INFO) << "prob: " << prob_data[i * dim + label_value * inner_num_ + j];
+      //LOG(INFO) << "loss: " << loss;
       ++count;
     }
   }

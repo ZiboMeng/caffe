@@ -439,6 +439,7 @@ int Net<Dtype>::AppendBottom(const NetParameter& param, const int layer_id,
 template <typename Dtype>
 void Net<Dtype>::AppendParam(const NetParameter& param, const int layer_id,
                              const int param_id) {
+  //std::cout << "The param id is: " << param_id << std::endl;
   const LayerParameter& layer_param = layers_[layer_id]->layer_param();
   const int param_size = layer_param.param_size();
   string param_name =
@@ -739,40 +740,217 @@ void Net<Dtype>::Reshape() {
 
 template <typename Dtype>
 void Net<Dtype>::CopyTrainedLayersFrom(const NetParameter& param) {
+  LOG(INFO) << "Copying layers for phase: " << phase_;
+  //used to record the copied layers
+  std::vector<int> copied_layers;
+  const string surfix = "_p";
   int num_source_layers = param.layer_size();
   for (int i = 0; i < num_source_layers; ++i) {
     const LayerParameter& source_layer = param.layer(i);
     const string& source_layer_name = source_layer.name();
     int target_layer_id = 0;
     while (target_layer_id != layer_names_.size() &&
-        layer_names_[target_layer_id] != source_layer_name) {
-      ++target_layer_id;
-    }
+      layer_names_[target_layer_id] != source_layer_name) {
+      ++target_layer_id; }
+    // did not find any matched names, then ignore
     if (target_layer_id == layer_names_.size()) {
       LOG(INFO) << "Ignoring source layer " << source_layer_name;
       continue;
     }
-    DLOG(INFO) << "Copying source layer " << source_layer_name;
+    DLOG(INFO) << "Copying source layer " << source_layer_name
+    << " to layer " << layer_names_[target_layer_id];
     vector<shared_ptr<Blob<Dtype> > >& target_blobs =
-        layers_[target_layer_id]->blobs();
+    layers_[target_layer_id]->blobs();
+    copied_layers.push_back(target_layer_id);
     CHECK_EQ(target_blobs.size(), source_layer.blobs_size())
-        << "Incompatible number of blobs for layer " << source_layer_name;
+    << "Incompatible number of blobs for layer " << source_layer_name;
     for (int j = 0; j < target_blobs.size(); ++j) {
       if (!target_blobs[j]->ShapeEquals(source_layer.blobs(j))) {
         Blob<Dtype> source_blob;
         const bool kReshape = true;
         source_blob.FromProto(source_layer.blobs(j), kReshape);
         LOG(FATAL) << "Cannot copy param " << j << " weights from layer '"
-            << source_layer_name << "'; shape mismatch.  Source param shape is "
-            << source_blob.shape_string() << "; target param shape is "
-            << target_blobs[j]->shape_string() << ". "
-            << "To learn this layer's parameters from scratch rather than "
-            << "copying from a saved net, rename the layer.";
+        << source_layer_name << "'; shape mismatch.  Source param shape is "
+        << source_blob.shape_string() << "; target param shape is "
+        << target_blobs[j]->shape_string() << ". "
+        << "To learn this layer's parameters from scratch rather than "
+        << "copying from a saved net, rename the layer.";
+      }
+      const bool kReshape = false;
+      //LOG(INFO) << "target blob before is " << (*target_blobs[j]).data_at(0,0,0,0); 
+      target_blobs[j]->FromProto(source_layer.blobs(j), kReshape);
+      //LOG(INFO) << "target blob before is " << (*target_blobs[j]).data_at(0,0,0,0); 
+    } // end for (int j = 0; j < target_blobs.size(); ++j) 
+  } // done with for (int i = 0; i < num_source_layers; ++i) 
+
+  for (int i = 0; i < num_source_layers; ++i) {
+    const LayerParameter& source_layer = param.layer(i);
+    const string& source_layer_name = source_layer.name() + surfix;
+    int target_layer_id = 0;
+    while (target_layer_id != layer_names_.size() &&
+      layer_names_[target_layer_id] != source_layer_name) {
+      ++target_layer_id; }
+    // did not find any matched names, then ignore
+    if (target_layer_id == layer_names_.size()) {
+      LOG(INFO) << "Ignoring source layer " << source_layer_name;
+      continue;
+    }
+    DLOG(INFO) << "Copying source layer " << source_layer_name
+    << " to layer " << layer_names_[target_layer_id];
+    vector<shared_ptr<Blob<Dtype> > >& target_blobs =
+    layers_[target_layer_id]->blobs();
+    copied_layers.push_back(target_layer_id);
+    CHECK_EQ(target_blobs.size(), source_layer.blobs_size())
+    << "Incompatible number of blobs for layer " << source_layer_name 
+    << " to layer " << layer_names_[target_layer_id];
+    for (int j = 0; j < target_blobs.size(); ++j) {
+      if (!target_blobs[j]->ShapeEquals(source_layer.blobs(j))) {
+        Blob<Dtype> source_blob;
+        const bool kReshape = true;
+        source_blob.FromProto(source_layer.blobs(j), kReshape);
+        LOG(FATAL) << "Cannot copy param " << j << " weights from layer '"
+        << source_layer_name << "'; shape mismatch.  Source param shape is "
+        << source_blob.shape_string() << "; target param shape is "
+        << target_blobs[j]->shape_string() << ". "
+        << "To learn this layer's parameters from scratch rather than "
+        << "copying from a saved net, rename the layer.";
+      }
+      const bool kReshape = false;
+      //LOG(INFO) << "target blob before is " << (*target_blobs[j]).data_at(0,0,0,0); 
+      target_blobs[j]->FromProto(source_layer.blobs(j), kReshape);
+      //LOG(INFO) << "target blob before is " << (*target_blobs[j]).data_at(0,0,0,0); 
+    } // end for (int j = 0; j < target_blobs.size(); ++j) 
+  } // done with for (int i = 0; i < num_source_layers; ++i) 
+
+  /*// go through all the layers to see if there are any two layers sharing parameter 
+  // without updating (layers shared weights initialized with random weights, and 
+  // parameters may be copied from a single stream CNN. What we want to do here is to
+  // ensure all the two layers are updated with the trained weights)
+
+  // Used to understand the code *
+  **********std::cout << "The number of layers is " << layers_.size() << std::endl;
+  std::cout << "The names of the layers are: " << std::endl;
+  for (int l=0;l<layers_.size();l++){
+    const LayerParameter& layer_param = layers_[l]->layer_param();
+    const int param_size = layer_param.param_size();
+    string param_name =
+      (param_size > 0) ? layer_param.param(0).name() : "";
+    std::cout<< "Layer " << layer_names_[l] << " " << param_name << std::endl;
+  }
+  for (int l=0;l<copied_layers.size();l++){
+  std::cout << "The copied layers are: " << layer_names_[copied_layers[l]] << std::endl;}****************
+
+  // visit all layers check
+  // 1. if the layer is copied from a pretrained model: Y - skip | N - 2
+  // 2. if it share the same param name with another layer: Y - 3 | N - skip
+  // 3. check if the shared layer is copied from a pretrained model: Y - 4 | N - skip
+  // 4. copy the params
+    LOG(INFO) << "Start checking if we need to update params of some layers";
+    for (int layer_id = 0; layer_id < layer_names_.size(); layer_id++){
+      bool copied = false;
+      for (int t = 0; t < copied_layers.size(); t++){
+        if (layer_id == copied_layers[t]){
+          copied = true;
+          break;
+        }
+      } //for (int t = 0; t < copied_layers.size(); t++)
+      if (copied) {
+        DLOG(INFO) << "Layer " << layer_names_[layer_id] << " is copied from the pretrained model";
+        continue;
+      }
+      for (int param_id = 0; param_id < 2; param_id++){
+        const LayerParameter& layer_param = layers_[layer_id]->layer_param();
+        const int param_size = layer_param.param_size();
+        string param_name =
+        (param_size > param_id) ? layer_param.param(param_id).name() : "";
+        if (!param_size || !param_name.size() || (param_name.size() &&
+          param_names_index_.find(param_name) == param_names_index_.end())) {
+      // This layer "owns" this parameter blob -- it is either anonymous
+      // (i.e., not given a param_name) or explicitly given a name that we
+      // haven't already seen.
+          DLOG(INFO) << "Layer " << layer_names_[layer_id] << " is not sharing params with any other layer";
+        continue;
+      } else {
+    // Named param blob with name we've seen before: share params
+        const int owner_net_param_id = param_names_index_[param_name];
+        const pair<int, int>& owner_index =
+        param_layer_indices_[owner_net_param_id];
+        const int owner_layer_id = owner_index.first;
+        const int owner_param_id = owner_index.second;
+        copied = false;
+        for (int t = 0; t < copied_layers.size(); t++){
+          if (owner_layer_id == copied_layers[t]){
+            copied = true;
+            break;
+          }
+      } //for (int t = 0; t < copied_layers.size(); t++)
+      if (!copied) {
+        DLOG(INFO) << "Layer " << layer_names_[layer_id] << " is not copied from the pretrained model";
+        break;
+      }
+      LOG_IF(INFO, Caffe::root_solver()) << "Sharing parameters '" << param_name
+      << "' owned by "
+      << "layer '" << layer_names_[owner_layer_id] << "' with layer '" << layer_names_[layer_id] 
+      << "', param " << "index " << owner_param_id;
+      Blob<Dtype>* this_blob = layers_[layer_id]->blobs()[param_id].get();
+      Blob<Dtype>* owner_blob =
+      layers_[owner_layer_id]->blobs()[owner_param_id].get();
+      const int param_size = layer_param.param_size();
+      if (param_size > param_id && (layer_param.param(param_id).share_mode() ==
+        ParamSpec_DimCheckMode_PERMISSIVE)) {
+      // Permissive dimension checking -- only check counts are the same.
+        CHECK_EQ(this_blob->count(), owner_blob->count())
+      << "Cannot share param '" << param_name << "' owned by layer '"
+      << layer_names_[owner_layer_id] << "' with layer '"
+      << layer_names_[layer_id] << "'; count mismatch.  Owner layer param "
+      << "shape is " << owner_blob->shape_string() << "; sharing layer "
+      << "shape is " << this_blob->shape_string();
+    } else {
+      // Strict dimension checking -- all dims must be the same.
+      CHECK(this_blob->shape() == owner_blob->shape())
+      << "Cannot share param '" << param_name << "' owned by layer '"
+      << layer_names_[owner_layer_id] << "' with layer '"
+      << layer_names_[layer_id] << "'; shape mismatch.  Owner layer param "
+      << "shape is " << owner_blob->shape_string() << "; sharing layer "
+      << "expects shape " << this_blob->shape_string();
+    }
+
+    const LayerParameter& source_layer = layers_[owner_layer_id]->layer_param();//this->layers(owner_layer_id);
+    LOG(INFO) << "Layer name is " << source_layer.name();
+    vector<shared_ptr<Blob<Dtype> > >& target_blobs =
+    layers_[layer_id]->blobs();
+    CHECK_EQ(target_blobs.size(), source_layer.blobs_size());
+
+
+    for (int j = 0; j < target_blobs.size(); ++j) {
+      if (!target_blobs[j]->ShapeEquals(source_layer.blobs(j))) {
+        Blob<Dtype> source_blob;
+        const bool kReshape = true;
+        source_blob.FromProto(source_layer.blobs(j), kReshape);
+        LOG(FATAL) << "Cannot copy param " << j << " weights from layer '"
+        << layer_names_[owner_layer_id] << "'; shape mismatch.  Source param shape is "
+        << source_blob.shape_string() << "; target param shape is "
+        << target_blobs[j]->shape_string() << ". "
+        << "To learn this layer's parameters from scratch rather than "
+        << "copying from a saved net, rename the layer.";
       }
       const bool kReshape = false;
       target_blobs[j]->FromProto(source_layer.blobs(j), kReshape);
-    }
+    } // end for (int j = 0; j < target_blobs.size(); ++j) 
+    
+    ***************const vector<shared_ptr<Blob<Dtype> > >& source_blobs = layers_[owner_layer_id]->blobs();//this->layers(owner_layer_id);
+    vector<shared_ptr<Blob<Dtype> > >& target_blobs =
+    layers_[layer_id]->blobs();
+    CHECK_EQ(target_blobs.size(), source_blobs.size());
+
+
+    for (int j = 0; j < target_blobs.size(); ++j) {
+      const bool kReshape = false;
+      const Blob<Dtype>& source = source_blobs[j];
+      target_blobs[j]->CopyFrom(source);
+    } // end for (int j = 0; j < target_blobs.size(); ++j)**************
   }
+}}*/
 }
 
 template <typename Dtype>

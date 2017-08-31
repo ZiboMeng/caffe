@@ -34,18 +34,33 @@ void ContrastiveLossLayer<Dtype>::Forward_gpu(
       this->layer_param_.contrastive_loss_param().legacy_version();
   Dtype loss(0.0);
   for (int i = 0; i < bottom[0]->num(); ++i) {
+    //if (margin == 5)
+    //  LOG(INFO) << "label is " << static_cast<int>(bottom[2]->cpu_data()[i]);
     if (static_cast<int>(bottom[2]->cpu_data()[i])) {  // similar pairs
+      //if (margin == 9)
+      //  LOG(INFO) << "Similar distance " << dist_sq_.cpu_data()[i];
       loss += dist_sq_.cpu_data()[i];
+      //if (margin == 5)
+        //LOG(INFO) << "Loss is " << loss;
     } else {  // dissimilar pairs
       if (legacy_version) {
+        //LOG(INFO) << "margin is " << margin << " v.s. distance " << dist_sq_.cpu_data()[i];
         loss += std::max(margin - dist_sq_.cpu_data()[i], Dtype(0.0));
       } else {
+        //if (margin == 9)
+        //  LOG(INFO) << "margin is " << margin << " v.s. sqrt distance " << sqrt(dist_sq_.cpu_data()[i]) << " v.s. distance " << dist_sq_.cpu_data()[i];
         Dtype dist = std::max(margin - sqrt(dist_sq_.cpu_data()[i]),
-                              Dtype(0.0));
+                              Dtype(0.0)); 
         loss += dist*dist;
       }
     }
   }
+  /*  int pos_num = 0;
+    int neg_num = 0;
+    for (int i = 0; i < bottom[0]->num(); ++i)
+    if (static_cast<int>(bottom[2]->cpu_data()[i])) pos_num++;
+    else  neg_num++;
+  LOG(INFO) << "pos : neg = " << pos_num << " : " << neg_num;*/
   loss = loss / static_cast<Dtype>(bottom[0]->num()) / Dtype(2);
   top[0]->mutable_cpu_data()[0] = loss;
 }
