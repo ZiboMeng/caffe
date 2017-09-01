@@ -1,5 +1,0 @@
-Using wechat (1) or not (0)?
-Traceback (most recent call last):
-  File "./examples/ckplus/run_mnist.py", line 366, in <module>
-    dec = int(raw_input())
-IOError: [Errno 9] Bad file descriptor
